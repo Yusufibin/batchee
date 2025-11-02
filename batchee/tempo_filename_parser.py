@@ -26,10 +26,14 @@
 # limitations under the License.
 """Holds the logic for grouping together data files based on their filenames."""
 
+import json
 import logging
 import re
+import time
 from argparse import ArgumentParser
+from collections import defaultdict
 from datetime import datetime
+from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 default_logger = logging.getLogger(__name__)
@@ -50,6 +54,7 @@ tempo_granule_filename_pattern = re.compile(
 DEFAULT_TIMEZONE = ZoneInfo("UTC")
 
 
+@lru_cache(maxsize=128)
 def get_day_in_us_central(
     day_in_granule: str, time_in_granule: str, assume_tz=DEFAULT_TIMEZONE
 ) -> str:
@@ -87,10 +92,14 @@ def get_batch_indices(filenames: list, logger: logging.Logger = default_logger) 
     list[int]
         batch index for each filename in the original list, e.g. [0, 0, 0, 1, 1, 1, ...]
     """
+    start_time = time.time()
     logger.info(f"get_batch_indices() starting --- with {len(filenames)} filenames")
 
-    # Make a new list with days and scans, e.g. [('20130701', 'S009'), ('20130701', 'S009'), ...]
-    day_and_scans: list[tuple[str, str]] = []
+    batch_mapper: dict[tuple[str, str], int] = {}
+    result: list[int] = []
+    batch_index = 0
+    skipped_count = 0
+
     for name in filenames:
         matches = tempo_granule_filename_pattern.match(name)
         if matches:
@@ -98,20 +107,25 @@ def get_batch_indices(filenames: list, logger: logging.Logger = default_logger) 
             day_in_central = get_day_in_us_central(
                 match_dict["day_in_granule"], match_dict["time_in_granule"]
             )
-            day_and_scans.append((day_in_central, match_dict["daily_scan_id"]))
+            day_scan = (day_in_central, match_dict["daily_scan_id"])
+            if day_scan not in batch_mapper:
+                batch_mapper[day_scan] = batch_index
+                batch_index += 1
+            result.append(batch_mapper[day_scan])
+        else:
+            logger.warning(f"Filename does not match TEMPO pattern and will be skipped: {name}")
+            skipped_count += 1
 
-    # Unique day-scans are determined (while keeping the same order). Each will be its own batch.
-    unique_day_scans: list[tuple[str, str]] = sorted(set(day_and_scans), key=day_and_scans.index)
+    if skipped_count > 0:
+        logger.info(f"Skipped {skipped_count} filenames that did not match the pattern.")
 
+    unique_day_scans = list(batch_mapper.keys())
     logger.info(f"unique_day_scans==={unique_day_scans}.")
 
-    # Map each day/scan to an integer
-    batch_mapper: dict[tuple[str, str], int] = {
-        day_scan: idx for idx, day_scan in enumerate(unique_day_scans)
-    }
+    end_time = time.time()
+    logger.info(f"get_batch_indices() completed in {end_time - start_time:.2f} seconds.")
 
-    # Generate a new list with the integer representation for each entry in the original list
-    return [batch_mapper[day_scan] for day_scan in day_and_scans]
+    return result
 
 
 def main() -> list[list[str]]:
@@ -132,6 +146,12 @@ def main() -> list[list[str]]:
         help="Enable verbose output to stdout; useful for debugging",
         action="store_true",
     )
+    parser.add_argument(
+        "--output-format",
+        choices=["default", "json", "csv"],
+        default="default",
+        help="Output format for grouped filenames (default: return as Python list)",
+    )
 
     args = parser.parse_args()
 
@@ -149,6 +169,16 @@ def main() -> list[list[str]]:
     for k, v in zip(batch_indices, input_filenames, strict=False):
         grouped.setdefault(k, []).append(v)
     grouped_names: list[list[str]] = [grouped[k] for k in unique_category_indices]
+
+    # Handle output format
+    if args.output_format == "json":
+        print(json.dumps(grouped_names))
+    elif args.output_format == "csv":
+        for group in grouped_names:
+            print(",".join(group))
+    else:
+        # Default: return for programmatic use, but since CLI, perhaps print nothing or the list
+        pass  # For CLI, maybe print the groups
 
     return grouped_names
 
