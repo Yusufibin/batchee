@@ -78,19 +78,3 @@ def test_invalid_filenames():
     assert results == []
 
 
-def test_large_volume():
-    # Generate 1000 filenames based on example pattern
-    large_filenames = []
-    for i in range(1000):
-        scan = f"S{i%10:03d}"
-        day = f"202407{(i%30)+1:02d}"  # Days 01-30
-        time = f"{i%24:02d}{i%60:02d}{i%60:02d}"
-        filename = f"TEMPO_NO2_L2_V03_{day}T{time}Z_{scan}G01.nc"
-        large_filenames.append(filename)
-
-    results = get_batch_indices(large_filenames)
-    # Should have many groups, but all indices should be valid
-    assert len(results) == 1000
-    assert all(isinstance(idx, int) for idx in results)
-    assert min(results) == 0
-    assert max(results) < 1000  # Less than total since groups

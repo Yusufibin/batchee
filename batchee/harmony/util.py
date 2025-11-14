@@ -26,13 +26,9 @@
 # limitations under the License.
 """Misc utility functions"""
 
-import logging
 from datetime import datetime
-from urllib.parse import urlparse
 
 from pystac import Asset, Item
-
-logger = logging.getLogger(__name__)
 
 VALID_EXTENSIONS = (".nc4", ".nc")
 VALID_MEDIA_TYPES = ["application/x-netcdf", "application/x-netcdf4"]
@@ -76,16 +72,6 @@ def _get_netcdf_urls(items: list[Item]) -> list[str]:
     if None in catalog_urls:
         raise RuntimeError("Some input granules do not have NetCDF-4 assets.")
 
-    # Validate URLs for security
-    for url in catalog_urls:
-        if not url:
-            raise RuntimeError("Empty URL found in assets.")
-        parsed = urlparse(url)
-        if parsed.scheme not in ('http', 'https', 's3', 'file'):
-            logger.warning(f"Potentially unsafe URL scheme: {parsed.scheme} in {url}")
-        if '..' in url:
-            raise RuntimeError(f"Path traversal detected in URL: {url}")
-
     return catalog_urls  # type: ignore[return-value]
 
 
@@ -97,9 +83,9 @@ def _get_output_bounding_box(input_items: list[Item]) -> list[float]:
     if not input_items:
         return []
 
-    bounding_box = list(input_items[0].bbox)  # Create a copy to avoid modifying original
+    bounding_box = input_items[0].bbox
 
-    for item in input_items[1:]:  # Start from second item
+    for item in input_items:
         bounding_box[0] = min(bounding_box[0], item.bbox[0])
         bounding_box[1] = min(bounding_box[1], item.bbox[1])
         bounding_box[2] = max(bounding_box[2], item.bbox[2])
