@@ -87,7 +87,6 @@ def get_batch_indices(filenames: list, logger: logging.Logger = default_logger) 
     list[int]
         batch index for each filename in the original list, e.g. [0, 0, 0, 1, 1, 1, ...]
     """
-    # Make a new list with days and scans, e.g. [('20130701', 'S009'), ('20130701', 'S009'), ...]
 
     logger.info(f"get_batch_indices() starting --- with {len(filenames)} filenames")
     
