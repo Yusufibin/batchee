@@ -76,5 +76,3 @@ def test_invalid_filenames():
     invalid_filenames = ["invalid.nc", "TEMPO_NO2_L2_V03_20240731.nc", "random_file.txt"]
     results = get_batch_indices(invalid_filenames)
     assert results == []
-
-
